@@ -975,28 +975,53 @@ function loadFb2Doc(doc, fn) {
   const author   =[firstName,lastName].filter(Boolean).join(' ');
   const bookTitle=titleEl?.textContent?.trim()||fn.replace(/\.fb2$/i,'');
   const fullTitle=author?`${bookTitle} — ${author}`:bookTitle;
+
+  // Картинки
   const imageMap={};
   doc.querySelectorAll('binary').forEach(bin=>{
     const id=bin.getAttribute('id'),mime=bin.getAttribute('content-type')||'image/jpeg';
     const data=bin.textContent.trim().replace(/\s/g,'');
     if(id) imageMap['#'+id]=`data:${mime};base64,${data}`;
   });
+
   S.chapters=[];
+
+  // Рекурсивно обходим секции — каждая секция с заголовком = отдельная глава
+  function collectSections(parent, depth) {
+    const secs=[...parent.querySelectorAll(':scope > section')];
+    if(!secs.length) return;
+    secs.forEach((sec, si) => {
+      const titleEl2=sec.querySelector(':scope > title');
+      const titleText=titleEl2?.textContent?.trim()||`Раздел ${S.chapters.length+1}`;
+
+      // Контент секции без вложенных секций
+      const clone=sec.cloneNode(true);
+      clone.querySelectorAll(':scope > section').forEach(s=>s.remove());
+      const html=fb2ToHtml(clone, imageMap);
+
+      if(html.trim()) {
+        S.chapters.push({id:S.chapters.length, title:titleText, content:html});
+      }
+
+      // Рекурсивно вложенные секции
+      collectSections(sec, depth+1);
+    });
+  }
+
   const bodies=[...doc.querySelectorAll('body')];
   if(!bodies.length) throw new Error('FB2: нет тела');
-  bodies.forEach((body,bi)=>{
-    const sections=body.querySelectorAll(':scope > section');
-    if(!sections.length) {
-      const html=fb2ToHtml(body,imageMap);
-      if(html.trim()) S.chapters.push({id:S.chapters.length,title:body.querySelector('title')?.textContent?.trim()||bookTitle,content:html});
+
+  bodies.forEach((body, bi) => {
+    const topSecs=body.querySelectorAll(':scope > section');
+    if(!topSecs.length) {
+      // Нет секций — весь body как одна глава
+      const html=fb2ToHtml(body, imageMap);
+      if(html.trim()) S.chapters.push({id:S.chapters.length, title:bookTitle, content:html});
     } else {
-      sections.forEach((sec,si)=>{
-        const title2=sec.querySelector(':scope > title')?.textContent?.trim()||`Раздел ${si+1}`;
-        const html=fb2ToHtml(sec,imageMap);
-        if(html.trim()) S.chapters.push({id:S.chapters.length,title:title2,content:html});
-      });
+      collectSections(body, 0);
     }
   });
+
   if(!S.chapters.length) throw new Error('FB2: текст не найден');
   finalizeBook(fullTitle);
 }
@@ -1157,13 +1182,8 @@ function splitHtmlChapters(html,title) {
   if(cur.nodes.length>0&&cur.nodes.some(n=>n.textContent.trim()))
     chapters.push({...cur,content:cur.nodes.map(n=>n.outerHTML||n.textContent).join('')});
   if(!chapters.length) return splitPages(root.textContent||'',title);
-  const merged=[];
-  for(const ch of chapters){
-    if(merged.length>0&&ch.content.length<500&&merged[merged.length-1].content.length<3000)
-      merged[merged.length-1].content+=ch.content;
-    else merged.push(ch);
-  }
-  return merged.map((ch,i)=>({id:i,title:ch.title,content:ch.content}));
+  // Не склеиваем главы — возвращаем все как есть
+  return chapters.map((ch,i)=>({id:i,title:ch.title,content:ch.content}));
 }
 function esc(s){return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');}
 function readAs(file,type){
