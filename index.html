@@ -1023,6 +1023,15 @@ function loadFb2Doc(doc, fn) {
   });
 
   if(!S.chapters.length) throw new Error('FB2: текст не найден');
+
+  // Фильтруем главы у которых нет реального текста (только пробелы/теги)
+  S.chapters = S.chapters.filter(ch => {
+    const tmp = document.createElement('div');
+    tmp.innerHTML = ch.content;
+    return tmp.textContent.trim().length > 10;
+  }).map((ch, i) => ({...ch, id: i}));
+
+  if(!S.chapters.length) throw new Error('FB2: после фильтрации глав не осталось');
   finalizeBook(fullTitle);
 }
 function fb2ToHtml(node,im) {
@@ -1246,16 +1255,21 @@ function renderChapter(idx, animate=false, dir='right') {
 }
 
 function wrapSentences() {
-  chCont.querySelectorAll('p,li,blockquote').forEach(el=>{
-    if(el.querySelector('p,li')||!el.textContent.trim()) return;
-    const spans=splitSentences(el.textContent);
-    if(spans.length<2){
+  // Охватываем все текстовые элементы включая заголовки
+  chCont.querySelectorAll('p,li,blockquote,h1,h2,h3,div').forEach(el=>{
+    // Пропускаем контейнеры с вложенными блоками
+    if(el.querySelector('p,li,h1,h2,h3,blockquote,div')) return;
+    if(!el.textContent.trim()) return;
+    // Уже обёрнут
+    if(el.classList.contains('tts-s')) return;
+    const sents=splitSentences(el.textContent);
+    if(sents.length<2){
       el.classList.add('tts-s');
       el.onclick=()=>jumpTo(el);
       return;
     }
     const frag=document.createDocumentFragment();
-    spans.forEach(s=>{
+    sents.forEach(s=>{
       if(!s.trim()) return;
       const sp=document.createElement('span');
       sp.className='tts-s';sp.textContent=s;
@@ -1264,6 +1278,16 @@ function wrapSentences() {
     });
     el.innerHTML='';el.appendChild(frag);
   });
+
+  // Если вообще ничего не нашли — делаем весь текст одним span
+  if(getSpans().length === 0 && chCont.textContent.trim()) {
+    const text = chCont.textContent.trim();
+    const sp = document.createElement('p');
+    sp.className='tts-s';
+    sp.textContent = text;
+    sp.onclick=()=>jumpTo(sp);
+    chCont.appendChild(sp);
+  }
 }
 function splitSentences(t){return t.match(/[^.!?…;]+[.!?…;]+\s*|[^.!?…;]+$/g)||[t];}
 
@@ -1293,7 +1317,18 @@ function startTTS(fromIdx=0) {
     const i=S.tts.sidx;
     if(i>=spans.length){
       stopTTS(false);
-      if(S.idx+1<S.chapters.length){ renderChapter(S.idx+1,true,'right'); setTimeout(()=>startTTS(0),350); }
+      if(S.idx+1<S.chapters.length){
+        renderChapter(S.idx+1,true,'right');
+        // Ждём пока анимация (200мс) + wrapSentences закончатся
+        // затем проверяем что spans реально появились
+        function tryStart(attempts) {
+          const newSpans = getSpans();
+          if(newSpans.length > 0) { startTTS(0); return; }
+          if(attempts > 0) setTimeout(()=>tryStart(attempts-1), 100);
+          else startTTS(0); // fallback
+        }
+        setTimeout(()=>tryStart(5), 250);
+      }
       else playBtn.textContent='▶';
       return;
     }
