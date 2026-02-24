@@ -1484,6 +1484,46 @@ if(isIOS && !isStandalone && !localStorage.getItem('ios_hint')) {
 
 // Init font size
 setFS(20);
+
+// ══════════════════════════════════════════════
+// WAKE LOCK — не гасить экран
+// ══════════════════════════════════════════════
+let wakeLock = null;
+
+async function requestWakeLock() {
+  if (!('wakeLock' in navigator)) {
+    alert('Wake Lock не поддерживается.\nЗайди в Настройки → Экран → Автоблокировка → Никогда');
+    return;
+  }
+  try {
+    wakeLock = await navigator.wakeLock.request('screen');
+    $('wake-btn').classList.add('active');
+    $('wake-btn').textContent = '☀️';
+    wakeLock.addEventListener('release', () => {
+      wakeLock = null;
+      $('wake-btn').classList.remove('active');
+    });
+  } catch(e) {
+    alert('Не удалось включить: ' + e.message);
+  }
+}
+
+function releaseWakeLock() {
+  if (wakeLock) { wakeLock.release(); wakeLock = null; }
+  $('wake-btn').classList.remove('active');
+}
+
+$('wake-btn').onclick = () => {
+  if (wakeLock) releaseWakeLock();
+  else requestWakeLock();
+};
+
+document.addEventListener('visibilitychange', async () => {
+  if (document.visibilityState === 'visible' && $('wake-btn').classList.contains('active')) {
+    await requestWakeLock();
+  }
+});
+
 </script>
 </body>
 </html>
