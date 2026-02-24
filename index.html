@@ -602,7 +602,7 @@ button { font-family: var(--fb); cursor: pointer; border: none; background: none
       <div class="land-formats">
         <span class="fmt">EPUB</span><span class="fmt">FB2</span><span class="fmt">TXT</span><span class="fmt">RTF</span><span class="fmt">MOBI</span>
       </div>
-      <button class="land-btn" onclick="$fi().click()">Открыть книгу</button>
+      <label for="file-input" class="land-btn" style="display:flex;align-items:center;justify-content:center;cursor:pointer;">Открыть книгу</label>
       <div class="land-hint">или перетащите файл на экран</div>
 
       <div id="install-banner">
@@ -717,7 +717,7 @@ button { font-family: var(--fb); cursor: pointer; border: none; background: none
   <div id="load-txt">Загружаем книгу…</div>
 </div>
 
-<input type="file" id="file-input" style="display:none">
+<input type="file" id="file-input" accept="*/*" style="display:none">
 
 <script>
 // ══════════════════════════════════════════════════════
